@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Survey</title>
+  <style>
+    :root {
+      --bg: #f7f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #d1d5db;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --success: #166534;
+      --danger: #b91c1c;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="url"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 15px;
+      background: white;
+    }
+
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    .question-row {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 12px;
+      background: #fcfcff;
+    }
+
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 14px;
+      cursor: pointer;
+      margin-right: 8px;
+    }
+
+    .primary { background: var(--accent); color: white; }
+    .primary:hover { background: var(--accent-hover); }
+    .secondary { background: #e5e7eb; color: #111827; }
+
+    .status {
+      margin-top: 12px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .status.error { color: var(--danger); }
+    .status.success { color: var(--success); }
+
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1 id="surveyHeading">Student Survey</h1>
+      <p class="status" id="statusMessage">Load the survey to begin.</p>
+
+      <div id="settingsBox">
+        <div style="margin-bottom: 16px;">
+          <label for="appsScriptUrl">Google Apps Script Web App URL</label>
+          <input id="appsScriptUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <label for="surveyName">Survey name</label>
+          <input id="surveyName" type="text" placeholder="example: class_size_demo" />
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <button class="secondary" id="loadSurveyBtn" type="button">Load Survey</button>
+        </div>
+      </div>
+
+      <form id="studentForm"></form>
+
+      <div>
+        <button class="primary" id="submitResponseBtn" type="button">Submit Response</button>
+        <button class="secondary" id="resetStudentBtn" type="button">Clear Answers</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const appsScriptUrlInput = document.getElementById('appsScriptUrl');
+    const surveyNameInput = document.getElementById('surveyName');
+    const surveyHeading = document.getElementById('surveyHeading');
+    const studentForm = document.getElementById('studentForm');
+    const statusMessage = document.getElementById('statusMessage');
+
+    const LOCAL_KEYS = {
+      appsScriptUrl: 'full_survey_apps_script_url',
+      surveyName: 'full_survey_last_student_survey_name'
+    };
+
+    let currentSurvey = null;
+
+    function setStatus(message, kind = '') {
+      statusMessage.textContent = message;
+      statusMessage.className = 'status';
+      if (kind) statusMessage.classList.add(kind);
+    }
+
+    function getQueryParam(name) {
+      const params = new URLSearchParams(window.location.search);
+      return params.get(name) || '';
+    }
+
+    async function apiPost(payload) {
+      const url = appsScriptUrlInput.value.trim();
+      if (!url) throw new Error('Please enter the Apps Script Web App URL.');
+
+      localStorage.setItem(LOCAL_KEYS.appsScriptUrl, url);
+      localStorage.setItem(LOCAL_KEYS.surveyName, surveyNameInput.value.trim());
+
+      const body = new URLSearchParams();
+      body.append('payload', JSON.stringify(payload));
+
+      const response = await fetch(url, {
+        method: 'POST',
+        body
+      });
+
+      const data = await response.json();
+      if (!data.ok) {
+        throw new Error(data.error || 'Request failed.');
+      }
+      return data;
+    }
+
+    function renderSurveyForm(survey) {
+      currentSurvey = survey;
+      studentForm.innerHTML = '';
+      surveyHeading.textContent = survey.surveyTitle || survey.surveyName || 'Student Survey';
+
+      survey.questions.forEach((q, i) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'question-row';
+
+        const label = document.createElement('label');
+        label.setAttribute('for', q.id);
+        label.textContent = `${i + 1}. ${q.text}`;
+        wrap.appendChild(label);
+
+        let field;
+        if (q.type === 'textarea') {
+          field = document.createElement('textarea');
+        } else if (q.type === 'number') {
+          field = document.createElement('input');
+          field.type = 'number';
+        } else if (q.type === 'yesno' || q.type === 'mc') {
+          field = document.createElement('select');
+          const blank = document.createElement('option');
+          blank.value = '';
+          blank.textContent = '-- Select an answer --';
+          field.appendChild(blank);
+          const options = q.type === 'yesno' ? ['Yes', 'No'] : (q.options || []);
+          options.forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt;
+            option.textContent = opt;
+            field.appendChild(option);
+          });
+        } else {
+          field = document.createElement('input');
+          field.type = 'text';
+        }
+
+        field.id = q.id;
+        field.name = q.id;
+        wrap.appendChild(field);
+        studentForm.appendChild(wrap);
+      });
+    }
+
+    async function loadSurvey() {
+      try {
+        const surveyName = surveyNameInput.value.trim();
+        if (!surveyName) throw new Error('Please enter the survey name.');
+        setStatus('Loading survey...');
+
+        const result = await apiPost({
+          action: 'getSurvey',
+          surveyName
+        });
+
+        renderSurveyForm(result.survey);
+        setStatus('Survey loaded.', 'success');
+      } catch (error) {
+        setStatus(error.message, 'error');
+      }
+    }
+
+    async function submitResponse() {
+      try {
+        if (!currentSurvey) throw new Error('Please load the survey first.');
+        setStatus('Submitting response...');
+
+        const answers = {};
+        currentSurvey.questions.forEach(q => {
+          const element = studentForm.querySelector(`[name="${q.id}"]`);
+          answers[q.id] = element ? element.value : '';
+        });
+
+        await apiPost({
+          action: 'submitResponse',
+          surveyName: currentSurvey.surveyName,
+          answers
+        });
+
+        studentForm.reset();
+        setStatus('Response submitted successfully.', 'success');
+      } catch (error) {
+        setStatus(error.message, 'error');
+      }
+    }
+
+    document.getElementById('loadSurveyBtn').addEventListener('click', loadSurvey);
+    document.getElementById('submitResponseBtn').addEventListener('click', submitResponse);
+    document.getElementById('resetStudentBtn').addEventListener('click', () => {
+      studentForm.reset();
+      setStatus('Answers cleared.');
+    });
+
+    function init() {
+      const savedAppsScriptUrl = localStorage.getItem(LOCAL_KEYS.appsScriptUrl);
+      const savedSurveyName = localStorage.getItem(LOCAL_KEYS.surveyName);
+      const querySurveyName = getQueryParam('survey');
+
+      if (savedAppsScriptUrl) appsScriptUrlInput.value = savedAppsScriptUrl;
+      if (querySurveyName) {
+        surveyNameInput.value = querySurveyName;
+      } else if (savedSurveyName) {
+        surveyNameInput.value = savedSurveyName;
+      }
+
+      if (querySurveyName && savedAppsScriptUrl) {
+        loadSurvey();
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
