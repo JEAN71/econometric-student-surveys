@@ -50,7 +50,6 @@
 
     input[type="text"],
     input[type="number"],
-    input[type="url"],
     textarea,
     select {
       width: 100%;
@@ -103,44 +102,31 @@
   <div class="container">
     <div class="card">
       <h1 id="surveyHeading">Student Survey</h1>
-      <p class="status" id="statusMessage">Load the survey to begin.</p>
+      <p class="status" id="statusMessage">Loading survey...</p>
 
-      <div id="settingsBox">
-    <!--    <div style="margin-bottom: 16px;">
-          <label for="appsScriptUrl">Google Apps Script Web App URL</label>
-          <input id="appsScriptUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
-        </div>-->
+      <div id="studentFormWrap" class="hidden">
+        <form id="studentForm"></form>
 
-        <div style="margin-bottom: 16px;">
-          <label for="surveyName">Survey name</label>
-          <input id="surveyName" type="text" placeholder="example: class_size_demo" />
-        </div>
-
-        <div style="margin-bottom: 16px;">
-          <button class="secondary" id="loadSurveyBtn" type="button">Load Survey</button>
+        <div>
+          <button class="primary" id="submitResponseBtn" type="button">Submit Response</button>
+          <button class="secondary" id="resetStudentBtn" type="button">Clear Answers</button>
         </div>
       </div>
 
-      <form id="studentForm"></form>
-
-      <div>
-        <button class="primary" id="submitResponseBtn" type="button">Submit Response</button>
-        <button class="secondary" id="resetStudentBtn" type="button">Clear Answers</button>
+      <div id="missingSurveyBox" class="hidden">
+        <p>Please use the full survey link provided by your instructor.</p>
       </div>
     </div>
   </div>
 
   <script>
-    const appsScriptUrlInput = document.getElementById('appsScriptUrl');
-    const surveyNameInput = document.getElementById('surveyName');
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyX_QCs0zukIGBIh-z_fCsIutXCuRbkk0Gli7zWNDxtSR9khTwx-lC7-zqQCoVL_EJ5/exec";
+
     const surveyHeading = document.getElementById('surveyHeading');
     const studentForm = document.getElementById('studentForm');
     const statusMessage = document.getElementById('statusMessage');
-
-    const LOCAL_KEYS = {
-      appsScriptUrl: 'full_survey_apps_script_url',
-      surveyName: 'full_survey_last_student_survey_name'
-    };
+    const studentFormWrap = document.getElementById('studentFormWrap');
+    const missingSurveyBox = document.getElementById('missingSurveyBox');
 
     let currentSurvey = null;
 
@@ -156,16 +142,10 @@
     }
 
     async function apiPost(payload) {
-      const url = https://script.google.com/macros/s/AKfycbyX_QCs0zukIGBIh-z_fCsIutXCuRbkk0Gli7zWNDxtSR9khTwx-lC7-zqQCoVL_EJ5/exec;
-      if (!url) throw new Error('Please enter the Apps Script Web App URL.');
-
-      localStorage.setItem(LOCAL_KEYS.appsScriptUrl, url);
-      localStorage.setItem(LOCAL_KEYS.surveyName, surveyNameInput.value.trim());
-
       const body = new URLSearchParams();
       body.append('payload', JSON.stringify(payload));
 
-      const response = await fetch(url, {
+      const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         body
       });
@@ -199,10 +179,12 @@
           field.type = 'number';
         } else if (q.type === 'yesno' || q.type === 'mc') {
           field = document.createElement('select');
+
           const blank = document.createElement('option');
           blank.value = '';
           blank.textContent = '-- Select an answer --';
           field.appendChild(blank);
+
           const options = q.type === 'yesno' ? ['Yes', 'No'] : (q.options || []);
           options.forEach(opt => {
             const option = document.createElement('option');
@@ -220,14 +202,23 @@
         wrap.appendChild(field);
         studentForm.appendChild(wrap);
       });
+
+      studentFormWrap.classList.remove('hidden');
+      missingSurveyBox.classList.add('hidden');
     }
 
     async function loadSurvey() {
       try {
-        const surveyName = surveyNameInput.value.trim();
-        if (!surveyName) throw new Error('Please enter the survey name.');
-        setStatus('Loading survey...');
+        const surveyName = getQueryParam('survey');
 
+        if (!surveyName) {
+          setStatus('No survey was specified in the link.', 'error');
+          missingSurveyBox.classList.remove('hidden');
+          studentFormWrap.classList.add('hidden');
+          return;
+        }
+
+        setStatus('Loading survey...');
         const result = await apiPost({
           action: 'getSurvey',
           surveyName
@@ -237,12 +228,17 @@
         setStatus('Survey loaded.', 'success');
       } catch (error) {
         setStatus(error.message, 'error');
+        missingSurveyBox.classList.remove('hidden');
+        studentFormWrap.classList.add('hidden');
       }
     }
 
     async function submitResponse() {
       try {
-        if (!currentSurvey) throw new Error('Please load the survey first.');
+        if (!currentSurvey) {
+          throw new Error('Survey is not loaded.');
+        }
+
         setStatus('Submitting response...');
 
         const answers = {};
@@ -264,31 +260,13 @@
       }
     }
 
-    document.getElementById('loadSurveyBtn').addEventListener('click', loadSurvey);
     document.getElementById('submitResponseBtn').addEventListener('click', submitResponse);
     document.getElementById('resetStudentBtn').addEventListener('click', () => {
       studentForm.reset();
       setStatus('Answers cleared.');
     });
 
-    function init() {
-      const savedAppsScriptUrl = localStorage.getItem(LOCAL_KEYS.appsScriptUrl);
-      const savedSurveyName = localStorage.getItem(LOCAL_KEYS.surveyName);
-      const querySurveyName = getQueryParam('survey');
-
-      if (savedAppsScriptUrl) appsScriptUrlInput.value = savedAppsScriptUrl;
-      if (querySurveyName) {
-        surveyNameInput.value = querySurveyName;
-      } else if (savedSurveyName) {
-        surveyNameInput.value = savedSurveyName;
-      }
-
-      if (querySurveyName && savedAppsScriptUrl) {
-        loadSurvey();
-      }
-    }
-
-    init();
+    loadSurvey();
   </script>
 </body>
 </html>
