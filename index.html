@@ -106,10 +106,10 @@
       <p class="status" id="statusMessage">Load the survey to begin.</p>
 
       <div id="settingsBox">
-        <div style="margin-bottom: 16px;">
+    <!--    <div style="margin-bottom: 16px;">
           <label for="appsScriptUrl">Google Apps Script Web App URL</label>
           <input id="appsScriptUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
-        </div>
+        </div>-->
 
         <div style="margin-bottom: 16px;">
           <label for="surveyName">Survey name</label>
@@ -156,7 +156,7 @@
     }
 
     async function apiPost(payload) {
-      const url = appsScriptUrlInput.value.trim();
+      const url = https://script.google.com/macros/s/AKfycbyX_QCs0zukIGBIh-z_fCsIutXCuRbkk0Gli7zWNDxtSR9khTwx-lC7-zqQCoVL_EJ5/exec;
       if (!url) throw new Error('Please enter the Apps Script Web App URL.');
 
       localStorage.setItem(LOCAL_KEYS.appsScriptUrl, url);
